@@ -1,0 +1,25 @@
+// Get Tenant Name, Cluster, and AzMove endpoint for a VM
+// Replace <VM_UNIQUE_ID> with the virtualMachineUniqueId from Azure Portal
+
+let vmUniqueId = "<VM_UNIQUE_ID>"; // e.g., "0f3e0d83-302d-4608-9f1f-bea95d75933e"
+
+cluster('azcore.centralus.kusto.windows.net').database('AzureCP').
+MycroftContainerSnapshot_Latest
+| where PreciseTimeStamp > ago(100d)
+| where VirtualMachineUniqueId == vmUniqueId
+| project 
+    PreciseTimeStamp, 
+    AzMoveEndpoint = Cluster,      // e.g., "uscentraleuap-prod-b" - use this for Get-AzMove
+    TenantName,                     // e.g., "20499ca6-ab49-46ff-968e-7aedddcbd95e" - use for $tenantName
+    FabricId = ClusterName          // e.g., "CDM06PrdApp17" - use for FabricId in migration input
+| order by PreciseTimeStamp desc
+| take 1
+
+// OUTPUT MAPPING:
+// ─────────────────────────────────────────────────────────────
+// | Kusto Column    | AzMove Parameter        | Example Value                          |
+// |-----------------|-------------------------|----------------------------------------|
+// | Cluster         | Get-AzMove -Name        | uscentraleuap-prod-b                   |
+// | TenantName      | $tenantName             | 20499ca6-ab49-46ff-968e-7aedddcbd95e   |
+// | ClusterName     | FabricId                | CDM06PrdApp17                          |
+// ─────────────────────────────────────────────────────────────

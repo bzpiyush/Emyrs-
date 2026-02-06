@@ -1,0 +1,16 @@
+{
+    "servers": {
+        "azurecm-kusto": {
+            "type": "stdio",
+            "command": "uvx",
+            "args": [
+                "microsoft-fabric-rti-mcp==0.2.0",
+                "--stdio"
+            ],
+            "env": {
+                "KUSTO_SERVICE_URI": "https://azurecm.kusto.windows.net",
+                "KUSTO_SERVICE_DEFAULT_DB": "AzureCM"
+            }
+        }
+    }
+}

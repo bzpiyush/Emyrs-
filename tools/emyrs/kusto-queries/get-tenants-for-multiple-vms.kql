@@ -1,0 +1,27 @@
+// Get Tenant Names for multiple VMs (to check if they share the same tenant)
+// Replace VM_UNIQUE_IDs with actual values from your deployed VMs
+
+let vmUniqueIds = dynamic(["<VM1_UNIQUE_ID>", "<VM2_UNIQUE_ID>"]);
+
+cluster('azcore.centralus.kusto.windows.net').database('AzureCP').
+MycroftContainerSnapshot_Latest
+| where PreciseTimeStamp > ago(100d)
+| where VirtualMachineUniqueId in (vmUniqueIds)
+| summarize arg_max(PreciseTimeStamp, *) by VirtualMachineUniqueId
+| project 
+    VirtualMachineUniqueId,
+    AzMoveEndpoint = Cluster,      // e.g., "uscentraleuap-prod-b"
+    TenantName,                     // e.g., "20499ca6-ab49-46ff-968e-7aedddcbd95e"
+    FabricId = ClusterName          // e.g., "CDM06PrdApp17"
+| order by TenantName asc
+
+// ─────────────────────────────────────────────────────────────
+// IMPORTANT: Check the TenantName column!
+// 
+// ✅ If ALL VMs have the SAME TenantName:
+//    → You can migrate them together with ONE command
+//
+// ⚠️ If VMs have DIFFERENT TenantNames:
+//    → You need SEPARATE migration commands for each tenant
+//    → Each tenant migrates independently
+// ─────────────────────────────────────────────────────────────
