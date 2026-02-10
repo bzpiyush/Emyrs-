@@ -1,0 +1,16 @@
+{
+    "github.copilot.chat.runCommand.enabled": true,
+    "chat.tools.autoApprove": true,
+    "chat.agent.autoApprove": true,
+    "terminal.integrated.defaultProfile.windows": "PowerShell",
+    "chat.mcp.discovery.enabled": {
+        "claude-desktop": true,
+        "windsurf": true,
+        "cursor-global": true,
+        "cursor-workspace": true
+    },
+    
+    "chat.agent.enabled": true,
+    "chat.agent.maxRequests": 50,
+    "chat.mcp.access": "all"
+}
