@@ -122,12 +122,30 @@ YOU CREATE:
 
 ---
 
+<resource_templates>
+## 📁 RESOURCE TEMPLATES
+
+Reference these files in `templates/` for detailed creation guidance:
+
+| Resource Type | Template File | When to Use |
+|---------------|---------------|-------------|
+| Single/Multiple VMs | `templates/VM.md` | Any VM creation |
+| VM Scale Sets | `templates/VMSS.md` | VMSS scenarios |
+| Standard Load Balancer | `templates/LoadBalancer-Standard.md` | Production LB |
+| Basic Load Balancer | `templates/LoadBalancer-Basic.md` | Dev/test LB |
+| Pseudo VIP / Floating IP | `templates/PseudoVIP.md` | HA failover, SQL AG |
+
+**How to use:** Read the relevant template file with `read_file` to get the correct commands and patterns for that resource type. Then dynamically generate commands based on user's specific requirements.
+</resource_templates>
+
+---
+
 ## WHAT TO ASK USER
 
 ### Always Ask (if not provided):
 1. **Subscription ID** - Required
 2. **Region** - `centraluseuap` or `eastus2euap`
-3. **TipNode.SessionId** - GUID (MANDATORY)
+3. **TipNode.SessionId** - GUID (MANDATORY for VMs/VMSS)
 4. **Resource Group Name** - Or offer to auto-generate
 
 ### Optional (have smart defaults):
@@ -257,57 +275,11 @@ Before deploying, ALWAYS show this summary:
   
   RESOURCES:
   ├── VNet: <name>-vnet (10.0.0.0/16)
-  │   ├── Subnet: subnet-1 (10.0.1.0/24) → 2 VMs
-  │   └── Subnet: subnet-2 (10.0.2.0/24) → 3 VMs
+  │   └── Subnet: default (10.0.0.0/24)
   ├── NSG: <name>-nsg (RDP allowed)
-  └── VMs: vm1, vm2, vm3, vm4, vm5
-      └── Tags: TipNode.SessionId=<guid>
+  └── VMs/VMSS/LB: <details>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Type 'yes' to deploy
-```
-
----
-
-## POWERSHELL EXECUTION
-
-After user confirms, execute PowerShell directly. Example for 2 VMs:
-
-```powershell
-$rg = "test-rg"
-$loc = "centraluseuap"
-$tipNode = "<user-provided-guid>"
-$tags = @{ "TipNode.SessionId" = $tipNode; "CreatedBy" = "Emyrs" }
-
-# Credentials (auto-generate)
-$password = "P@ss" + (Get-Random -Min 100000 -Max 999999) + "!"
-$secPwd = ConvertTo-SecureString $password -AsPlainText -Force
-$cred = New-Object PSCredential("azureuser", $secPwd)
-
-# 1. Resource Group
-New-AzResourceGroup -Name $rg -Location $loc -Tag $tags -Force
-
-# 2. NSG with RDP
-$rdp = New-AzNetworkSecurityRuleConfig -Name "Allow-RDP" -Protocol Tcp -Direction Inbound -Priority 1000 -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 3389 -Access Allow
-$nsg = New-AzNetworkSecurityGroup -Name "$rg-nsg" -ResourceGroupName $rg -Location $loc -SecurityRules $rdp -Tag $tags -Force
-
-# 3. VNet + Subnet
-$subnet = New-AzVirtualNetworkSubnetConfig -Name "default" -AddressPrefix "10.0.0.0/24" -NetworkSecurityGroupId $nsg.Id
-$vnet = New-AzVirtualNetwork -Name "$rg-vnet" -ResourceGroupName $rg -Location $loc -AddressPrefix "10.0.0.0/16" -Subnet $subnet -Tag $tags -Force
-
-# 4. VMs
-for ($i = 1; $i -le 2; $i++) {
-    $vmName = "vm$i"
-    $pip = New-AzPublicIpAddress -Name "$vmName-pip" -ResourceGroupName $rg -Location $loc -AllocationMethod Static -Sku Standard -Tag $tags -Force
-    $nic = New-AzNetworkInterface -Name "$vmName-nic" -ResourceGroupName $rg -Location $loc -SubnetId $vnet.Subnets[0].Id -PublicIpAddressId $pip.Id -Tag $tags -Force
-    
-    $vm = New-AzVMConfig -VMName $vmName -VMSize "Standard_D2s_v3" -Tags $tags |
-        Set-AzVMOperatingSystem -Windows -ComputerName $vmName -Credential $cred |
-        Set-AzVMSourceImage -PublisherName "MicrosoftWindowsServer" -Offer "WindowsServer" -Skus "2022-datacenter-g2" -Version "latest" |
-        Add-AzVMNetworkInterface -Id $nic.Id |
-        Set-AzVMBootDiagnostic -Disable
-    
-    New-AzVM -ResourceGroupName $rg -Location $loc -VM $vm
-}
 ```
 
 ---
@@ -322,20 +294,10 @@ for ($i = 1; $i -le 2; $i++) {
     Username: azureuser
     Password: <generated>
 
-  VMs CREATED:
-  ┌────────────────────────────────────────────────┐
-  │ vm1                                            │
-  │   VM Unique ID: <guid>  ← For Kusto query      │
-  │   Public IP: x.x.x.x                           │
-  │   TipNode.SessionId: <guid> ✓                  │
-  ├────────────────────────────────────────────────┤
-  │ vm2                                            │
-  │   VM Unique ID: <guid>  ← For Kusto query      │
-  │   Public IP: x.x.x.x                           │
-  │   TipNode.SessionId: <guid> ✓                  │
-  └────────────────────────────────────────────────┘
+  RESOURCES CREATED:
+  <list resources with IPs, IDs, etc.>
 
-  NEXT: Wait 5-15 min, then say "query kusto" - I will run the query FOR YOU!
+  NEXT: Wait 5-15 min, then say "query kusto"
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -805,160 +767,20 @@ Ask user: "Want me to save this report to a file?"
 ---
 
 <connectivity_testing>
-## 🔌 CONNECTIVITY TESTING BETWEEN VMs
+## 🔌 CONNECTIVITY TESTING
 
-<important>
-Private IPs are NOT routable from outside Azure. You MUST use `Invoke-AzVMRunCommand` 
-to run tests FROM INSIDE a VM to another VM's private IP.
-</important>
+For connectivity testing during migration, tell users to:
 
-### When User Says "test connectivity" or "check ping" or "test packet loss":
+1. **RDP into one of the VMs**
+2. **Download/copy the script** from `tools/Test-StreamConnectivity.ps1`
+3. **Run it inside the VM** targeting the other VM's private IP
 
-**Step 1: Get VM details and private IPs**
+Example:
 ```powershell
-# Get private IPs of all VMs in the resource group
-Get-AzNetworkInterface -ResourceGroupName "<RG>" | ForEach-Object {
-    [PSCustomObject]@{
-        VM  = $_.VirtualMachine.Id.Split('/')[-1]
-        NIC = $_.Name
-        PrivateIP = $_.IpConfigurations[0].PrivateIpAddress
-    }
-} | Format-Table -AutoSize
+.\Test-StreamConnectivity.ps1 -TargetIP "10.0.0.5" -DurationSeconds 300 -Port 3389
 ```
 
-**Step 2: Quick connectivity check (simple ping)**
-```powershell
-Invoke-AzVMRunCommand `
-    -ResourceGroupName "<RG>" `
-    -VMName "<SOURCE_VM>" `
-    -CommandId "RunPowerShellScript" `
-    -ScriptString "ping <TARGET_PRIVATE_IP> -n 10"
-```
-
-**Step 3: Continuous ping for migration window (ZERO PACKET LOSS test)**
-
-This is the key test — start this BEFORE migration, let it run DURING migration, 
-analyze AFTER migration to prove zero packet loss.
-
-```powershell
-# Start continuous ping test (runs for specified duration, logs every packet)
-Invoke-AzVMRunCommand `
-    -ResourceGroupName "<RG>" `
-    -VMName "<SOURCE_VM>" `
-    -CommandId "RunPowerShellScript" `
-    -ScriptString @"
-`$targetIP = '<TARGET_PRIVATE_IP>'
-`$duration = 300  # seconds (5 minutes — adjust for migration window)
-`$results = @()
-`$startTime = Get-Date
-`$seq = 0
-
-Write-Output "=== CONNECTIVITY TEST ==="
-Write-Output "Source: `$env:COMPUTERNAME"
-Write-Output "Target: `$targetIP"
-Write-Output "Start:  `$startTime"
-Write-Output "Duration: `$duration seconds"
-Write-Output "========================="
-
-while ((Get-Date) -lt `$startTime.AddSeconds(`$duration)) {
-    `$seq++
-    `$timestamp = Get-Date -Format 'HH:mm:ss.fff'
-    try {
-        `$ping = Test-Connection -ComputerName `$targetIP -Count 1 -ErrorAction Stop
-        `$latency = `$ping.ResponseTime
-        Write-Output "[`$timestamp] seq=`$seq OK latency=`$(`latency)ms"
-    } catch {
-        Write-Output "[`$timestamp] seq=`$seq FAILED *** PACKET DROPPED ***"
-    }
-    Start-Sleep -Milliseconds 500
-}
-
-`$endTime = Get-Date
-Write-Output ""
-Write-Output "=== RESULTS ==="
-Write-Output "End: `$endTime"
-Write-Output "Total Duration: `$([math]::Round((`$endTime - `$startTime).TotalSeconds, 1))s"
-Write-Output "Total Pings: `$seq"
-"@
-```
-
-**Step 4: TCP port connectivity test (beyond ICMP)**
-```powershell
-Invoke-AzVMRunCommand `
-    -ResourceGroupName "<RG>" `
-    -VMName "<SOURCE_VM>" `
-    -CommandId "RunPowerShellScript" `
-    -ScriptString @"
-`$targetIP = '<TARGET_PRIVATE_IP>'
-`$ports = @(3389, 80, 443, 445)
-
-Write-Output "=== TCP PORT TEST ==="
-Write-Output "Target: `$targetIP"
-foreach (`$port in `$ports) {
-    `$result = Test-NetConnection -ComputerName `$targetIP -Port `$port -WarningAction SilentlyContinue
-    if (`$result.TcpTestSucceeded) {
-        Write-Output "[OK]   Port `$port - OPEN"
-    } else {
-        Write-Output "[FAIL] Port `$port - CLOSED/FILTERED"
-    }
-}
-"@
-```
-
-### Connectivity Test Report Format:
-
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                 CONNECTIVITY TEST REPORT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Resource Group: <RG_NAME>
-  Source VM: <SOURCE_VM> (<SOURCE_IP>)
-  Target VM: <TARGET_VM> (<TARGET_IP>)
-  Test Duration: <DURATION>
-
-  ╔═══════════════════════════════════════════════════════════════╗
-  ║  RESULT: ✅ ZERO PACKET LOSS                                  ║
-  ║          (or ❌ PACKET LOSS DETECTED)                         ║
-  ╚═══════════════════════════════════════════════════════════════╝
-
-  ICMP PING:
-  ├── Total Pings Sent: <COUNT>
-  ├── Successful: <COUNT>
-  ├── Failed: <COUNT>
-  ├── Packet Loss: <PERCENT>%
-  ├── Avg Latency: <MS>ms
-  └── Max Latency: <MS>ms
-
-  TCP PORTS:
-  ├── 3389 (RDP):  ✅ Open
-  ├── 80 (HTTP):   ❌ Closed
-  ├── 443 (HTTPS): ❌ Closed
-  └── 445 (SMB):   ✅ Open
-
-  DROPPED PACKETS (if any):
-  ┌─────────────────────────────────────────────────────────────────┐
-  │ [14:32:05.123] seq=47 FAILED *** PACKET DROPPED ***            │
-  │ [14:32:05.650] seq=48 FAILED *** PACKET DROPPED ***            │
-  └─────────────────────────────────────────────────────────────────┘
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-### Migration Connectivity Workflow:
-
-When user wants to test connectivity DURING migration:
-
-1. **PRE-MIGRATION**: Run quick ping to confirm baseline connectivity
-2. **START CONTINUOUS PING**: Launch the duration-based test (5-10 min window)
-3. **RUN MIGRATION**: User runs AzMove on SAW while ping is active
-4. **COLLECT RESULTS**: After migration, retrieve ping output
-5. **GENERATE REPORT**: Parse output, count failures, report packet loss %
-
-**⚠️ Important Notes:**
-- `Invoke-AzVMRunCommand` has a ~90 second timeout for output
-- For long tests (>60s), the script runs but output may be truncated
-- For extended monitoring, use shorter test windows and run multiple rounds
-- ICMP (ping) may be blocked by NSG — ensure NSG allows ICMP between subnets
-  or use TCP-based tests instead
+This provides reliable TCP-based connectivity testing that works regardless of ICMP/firewall settings.
 </connectivity_testing>
 
 ---
