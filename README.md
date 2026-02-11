@@ -30,15 +30,17 @@ Emyrs handles everything — no manual commands needed.
 
 ---
 
-##  Prerequisites
+## Prerequisites
 
-| Requirement | Details |
+| Requirement | How to install |
 |---|---|
-| **VS Code** | With GitHub Copilot (Chat + Agent mode) |
+| **VS Code** | Latest version with GitHub Copilot (Chat + Agent mode) |
 | **Azure PowerShell** | `Install-Module -Name Az -AllowClobber -Scope CurrentUser` |
 | **Azure Login** | `Connect-AzAccount` |
-| **Python (uv/uvx)** | For Kusto MCP server — `pip install uv` or via [astral.sh](https://docs.astral.sh/uv/) |
+| **uv** (Python package runner) | `winget install astral-sh.uv` or `pip install uv` or [astral.sh/uv](https://docs.astral.sh/uv/) |
 | **Subscription Access** | Access to an Azure subscription for Merlin testing |
+
+> **You do NOT need to install:** Kusto Explorer, Azure Data Explorer extension, or any MCP extension. Everything is built-in.
 
 ---
 
@@ -60,7 +62,13 @@ code .
 Connect-AzAccount
 ```
 
-### 4. Switch to Emyrs chat mode
+### 4. Allow MCP servers
+When VS Code opens the repo, it will prompt:
+> "Allow MCP servers to start?"
+
+Click **Allow**. This starts two Kusto MCP servers (AzureCP + AzureCM). `uvx` will auto-download the `microsoft-fabric-rti-mcp` package on first run — no manual install needed.
+
+### 5. Switch to Emyrs chat mode
 - Open Copilot Chat → Click the chat mode dropdown → Select **"emyrs"**
 - Start talking: `"Create a VM in eastus2euap for Merlin testing"`
 
@@ -203,7 +211,19 @@ Remove-AzResourceGroup -Name "<RG_NAME>" -Force -AsJob
 
 ---
 
-## 👥 Team
+## �️ Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| MCP servers don't start | Make sure `uv` is installed: run `uvx --version` in terminal. If not found, install with `winget install astral-sh.uv` |
+| "Not authenticated" Kusto errors | Run `Connect-AzAccount` or `az login` in the terminal |
+| No "emyrs" chat mode in dropdown | Ensure the `.github/chatmodes/` folder is present and restart VS Code |
+| VM creation fails with `DiskServiceInternalError` | Canary region issue — ask Emyrs to retry in the other region |
+| `SubscriptionNotRegisteredForFeature` on Public IP | The subscription doesn't support `FirstPartyUsage` IP tags — Emyrs handles this automatically by falling back to resource tags |
+
+---
+
+## �👥 Team
 
 Built for the **Merlin Migration Testing** team.
 
